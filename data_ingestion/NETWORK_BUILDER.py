@@ -406,6 +406,7 @@ if __name__ == "__main__":
 
     print("\n=== AGENT-LEVEL CONTACT PREVALENCE AT TARGET TIMESTEP ===")
     report = agent_prevalence_at_ti(sim, ti=target_ms, disease_name="sis")
+    # NOTE: how do we decidd ti? sample from 9-11 say?
     print(report.head(20))
     print("\nAgents with at least one contact:")
     print(report.loc[report["contact_count"] > 0, ["agent_id", "contact_count", "contact_infected_fraction", "infected"]].head(20))
