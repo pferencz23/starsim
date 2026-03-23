@@ -3,10 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sciris as sc
 
-ss_int = ss.dtypes.int
-ss_float = ss.dtypes.float
-_ = None # For function signatures
-
 class SEIR_AMS(ss.Infection):
     """
     SEIR model with Asymtomatic/Mild/Severe infections
@@ -25,7 +21,7 @@ class SEIR_AMS(ss.Infection):
         p_death_severe (float/`ss.bernoulli`): the probability of death from severe disease
 
     """
-    def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
+    def __init__(self, pars=None, beta=None, init_prev=None, dur_inf=None, p_death=None, **kwargs):
         super().__init__()
         self.define_pars(
             init_prev = ss.bernoulli(p=0.01),
@@ -35,7 +31,6 @@ class SEIR_AMS(ss.Infection):
             p_symp = ss.choice(a=3, p=[0.30, 0.42, 0.28]),  # 0=asymptomatic, 1=mild, 2=severe
             p_death_mild = ss.bernoulli(p=0.25),
             p_death_severe = ss.bernoulli(p=0.70),
-            p_death = ss.bernoulli(p=0.6*0.25 + 0.4*0.7),
         )
         self.update_pars(pars, **kwargs)
 
@@ -101,15 +96,12 @@ class SEIR_AMS(ss.Infection):
         # Determine who dies and who recovers and when
         mild_die   = p.p_death_mild.rvs(mild_uids)
         severe_die = p.p_death_severe.rvs(severe_uids)
-        print('Mild die: ', mild_die)
-        print('Severe die: ', severe_die)
 
         will_die = np.zeros(len(uids), dtype=bool)
         mild_mask = symp == 1
         severe_mask = symp == 2
         will_die[mild_mask]   = p.p_death_mild.rvs(uids[mild_mask])
         will_die[severe_mask] = p.p_death_severe.rvs(uids[severe_mask])
-        print('Will die: ', will_die)
 
         self.ti_dead[uids[will_die]] = ti + dur_exp[will_die] + dur_inf[will_die] # Consider rand round, but not CRN safe
         self.ti_recovered[uids[~will_die]] = ti + dur_exp[~will_die] + dur_inf[~will_die]
