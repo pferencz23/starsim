@@ -28,7 +28,7 @@ def add_subdaily_timeline(
     df: pd.DataFrame,
     time_col: str = "time",
     duration_col: str = "contact_length",
-    tick: pd.Timedelta = pd.Timedelta(milliseconds=1),
+    tick: pd.Timedelta = pd.Timedelta(seconds=10), #update network resolution to reflect starstim variables
 ) -> tuple[pd.DataFrame, pd.Timestamp, pd.Timestamp]:
     """Convert timestamps to a fixed subdaily simulation timeline.
 
@@ -251,7 +251,7 @@ def main():
         start         = start_date,
         stop          = stop_date,
         # TODO: update resoluton
-        dt            = ss.days(1),
+        dt            = ss.days(10/86400), # 10 second resolution
         diseases      = seir, 
         networks      = net, 
         interventions = llmintervention,
