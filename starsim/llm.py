@@ -29,8 +29,9 @@ def default_agent_prompt(mod, uid, disease):
         str: Prompt text sent to the LLM. Must end with a question that the
             LLM answers with only ``'yes'`` or ``'no'``.
     """
-    status         = mod._agent_status(uid, disease)
-    local_prev     = mod._local_prevalence(uid, disease)
+    status             = mod._agent_status(uid, disease)
+    local_prev         = mod._local_prevalence(uid, disease)
+    _has_been_infected = mod.has_been_infected[uid]
     return (
         f"You are playing an epidemic decision game where your goal is to maximise your total points.\n"
         f"\n"
@@ -63,7 +64,7 @@ def default_agent_prompt(mod, uid, disease):
         f"\n"
         f"Your current state:\n"
         f"- Time: {mod.ti}\n"
-        f"- Status: {status}\n"
+        f"- Status: {status}, have I been infected: {str(_has_been_infected)}\n"
         f"- Points: {mod.points[uid]:.0f}\n"
         f"- Perceived infection risk: {mod.percieved_infection_risk[uid]:.2f}\n"
         f"- Perceived health severity: {mod.percieved_health_severity[uid]:.2f}\n"
@@ -269,6 +270,7 @@ class LLMIntervention(ss.Intervention):
             ss.FloatArr('quarantine_response_efficacy',       default=3.0, label='HBM perceived response-efficacy (1-6)'),
             ss.FloatArr('points',         default=0.0, label='Accumulated game points'),
             ss.FloatArr('n_quarantine_steps', default=0.0, label='Number of steps agent quarantined'),
+            ss.BoolState('has_been_infected', default=False, label='Agent has been infected?'),
         )
 
         self.log              = []   # Per-step sc.objdict: {t, ti, n_agents, n_quarantined, error}
@@ -320,18 +322,30 @@ class LLMIntervention(ss.Intervention):
         return float(disease.infected[contact_uids].mean())
 
     def _agent_status(self, uid, disease):
-        """ Return a brief health status string for one agent """
         if disease is None:
             return 'unknown'
-        if hasattr(disease, 'infected') and disease.infected[uid]:
-            return 'infected'
-        if hasattr(disease, 'recovered') and disease.recovered[uid]:
-            return 'recovered'
-        if hasattr(disease, 'exposed') and disease.exposed[uid]:
-            return 'exposed'
+        if hasattr(disease, 'symptom_cat') and disease.symptom_cat[uid]:
+            # asymptomatic
+            if 0 == disease.symptom_cat[uid]:
+                return 'healthy'
+            # ONLY KNOW IF THEY ARE INFECTED
+            # "mild"
+            if 1 == disease.symptom_cat[uid]:
+                if hasattr(disease, 'infected') and disease.infected[uid]:
+                    self.has_been_infected[uid] = True
+                    return 'mild symptom'
+            # "severe"
+            if 2 == disease.symptom_cat[uid]:
+                if hasattr(disease, 'infected') and disease.infected[uid]:
+                    self.has_been_infected[uid] = True
+                    return 'severe symptom'
+        # if hasattr(disease, 'recovered') and disease.recovered[uid]:
+        #     return 'recovered'
+        # if hasattr(disease, 'exposed') and disease.exposed[uid]:
+        #     return 'exposed'
         if hasattr(disease, 'dead') and disease.dead[uid]:
             return 'dead'
-        return 'susceptible'
+        return 'healthy'
 
     def _call_llm_agent(self, uid, disease):
         """ Ask the LLM whether this agent should quarantine. Returns bool. """
