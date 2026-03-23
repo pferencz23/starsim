@@ -347,12 +347,9 @@ def agent_prevalence_at_ti(
 if __name__ == "__main__":
     csv_path = "data_ingestion/histories.csv"
 
-    
-    
-    
-    
-    
-    # Load and process data step by step for inspection
+    # =========================
+    # LOAD + PREPROCESS
+    # =========================
     df = read_data(csv_path)
     df = clean_data(df)
     df, n_agents = remap_ids(df)
@@ -362,46 +359,122 @@ if __name__ == "__main__":
     print(f"Number of agents: {n_agents}")
     print(f"Start date: {start_date}")
     print(f"Stop date: {stop_date}")
+    print(f"Total contacts: {len(df)}")
 
-    print("\n=== SAMPLE OF PROCESSED DATA ===")
-    print(df[["time", "start_offset_ti", "dur_ti"]].head(10))
+    # =========================
+    # EDA SECTION
+    # =========================
 
-    # Check timestep differences (should reflect ms resolution)
-    diffs = df["start_offset_ti"].sort_values().diff().dropna()
-    print("\n=== TIMESTEP DIFFERENCES ===")
-    print("Min diff (ti units):", diffs.min())
-    print("Max diff (ti units):", diffs.max())
+    print("\n=== EDA: CONTACT DURATIONS ===")
+    durations = df["dur_ti"]  # in ms (1 tick = 1 ms)
+    print(f"Mean duration (ms): {durations.mean()/60000:.2f}")
+    print(f"Median duration (ms): {durations.median()/60000:.2f}")
+    print(f"Max duration (ms): {durations.max()/60000}")
 
-    # Convert a few back to real time to sanity check
-    print("\n=== RECONSTRUCTED TIMES (sanity check) ===")
-    tick = pd.Timedelta(milliseconds=1)
-    for i in range(5):
-        row = df.iloc[i]
-        reconstructed = start_date + row["start_offset_ti"] * tick
-        print(f"Original: {row['time']} | Reconstructed: {reconstructed}")
+    durations_sec = durations / 60000.0
 
-    # Check duration interpretation
-    print("\n=== DURATION CHECK ===")
-    for i in range(5):
-        row = df.iloc[i]
-        duration_ms = row["dur_ti"]  # since 1 tick = 1 ms
-        print(f"dur_ti: {row['dur_ti']} -> approx duration (ms): {duration_ms}")
+    plt.figure()
+    plt.hist(durations, bins=50)
+    plt.yscale("log")  # heavy tail check
+    plt.title("Distribution of Contact Durations (minutes)")
+    plt.xlabel("Duration (minutes)")
+    plt.ylabel("Frequency (log scale)")
+    plt.tight_layout()
+    plt.savefig("data_ingestion/eda_duration_hist.png")
+    plt.close()
 
-    print("\n=== FIRST 10 START TIMES ===")
-    print(df["start_offset_ti"].sort_values().head(10))
+    # =========================
+    # TIME OF DAY ANALYSIS
+    # =========================
+    print("\n=== EDA: TIME OF DAY ===")
+    df["hour"] = df["time"].dt.hour
+    avg_hour = df["hour"].mean()
+    print(f"Average contact hour: {avg_hour:.2f}")
 
+    plt.figure()
+    plt.hist(df["hour"], bins=24)
+    plt.title("Contacts by Hour of Day")
+    plt.xlabel("Hour")
+    plt.ylabel("Frequency")
+    plt.tight_layout()
+    plt.savefig("data_ingestion/eda_hour_hist.png")
+    plt.close()
+
+    # =========================
+    # CONTACTS PER AGENT
+    # =========================
+    print("\n=== EDA: CONTACTS PER AGENT ===")
+    contacts_per_agent = (
+        pd.concat([df["p1"], df["p2"]])
+        .value_counts()
+        .sort_index()
+    )
+
+    print(f"Mean contacts per agent: {contacts_per_agent.mean():.2f}")
+    print(f"Max contacts for an agent: {contacts_per_agent.max()}")
+
+    plt.figure()
+    plt.hist(contacts_per_agent, bins=50)
+    plt.yscale("log")
+    plt.title("Contacts per Agent (Degree Distribution Proxy)")
+    plt.xlabel("Number of Contacts")
+    plt.ylabel("Frequency (log scale)")
+    plt.tight_layout()
+    plt.savefig("data_ingestion/eda_contacts_per_agent.png")
+    plt.close()
+
+    # =========================
+    # INTER-EVENT TIMES (BURSTINESS)
+    # =========================
+    print("\n=== EDA: INTER-EVENT TIMES ===")
+    df_sorted = df.sort_values("start_offset_ti")
+    inter_event = df_sorted["start_offset_ti"].diff().dropna()
+
+    print(f"Mean inter-event time (ms): {inter_event.mean():.2f}")
+
+    plt.figure()
+    plt.hist(inter_event, bins=50)
+    plt.yscale("log")
+    plt.title("Inter-event Time Distribution (Burstiness)")
+    plt.xlabel("Δt (ms)")
+    plt.ylabel("Frequency (log scale)")
+    plt.tight_layout()
+    plt.savefig("data_ingestion/eda_interevent.png")
+    plt.close()
+
+    # =========================
+    # EDGE REPEAT ANALYSIS
+    # =========================
+    print("\n=== EDA: EDGE FREQUENCY ===")
+    edge_counts = df.groupby(["p1", "p2"]).size()
+
+    print(f"Mean interactions per edge: {edge_counts.mean():.2f}")
+    print(f"Max interactions for a pair: {edge_counts.max()}")
+
+    plt.figure()
+    plt.hist(edge_counts, bins=50)
+    plt.yscale("log")
+    plt.title("Repeated Contacts per Pair")
+    plt.xlabel("Number of interactions")
+    plt.ylabel("Frequency (log scale)")
+    plt.tight_layout()
+    plt.savefig("data_ingestion/eda_edge_repeats.png")
+    plt.close()
+
+    # =========================
+    # OPTIONAL: RUN SIM
+    # =========================
     print("\n=== RUNNING SMALL SIM ===")
 
     net, n_agents, start_date, stop_date = build_network(csv_path)
-
-    ms = ss.days(1/86_400_000)
+    ms = ss.days(1 / 86_400_000)
 
     target_ms = 13000
 
     sim = ss.Sim(
         n_agents=n_agents,
         networks=[net],
-        diseases = ss.SIS(init_prev = 0.1),
+        diseases=ss.SIS(init_prev=0.1),
         start=start_date,
         stop=start_date + pd.Timedelta(milliseconds=target_ms),
         dt=ms,
@@ -409,31 +482,26 @@ if __name__ == "__main__":
 
     sim.run()
 
-    print("\n=== AGENT-LEVEL CONTACT PREVALENCE AT TARGET TIMESTEP ===")
-    report = agent_prevalence_at_ti(sim, ti=target_ms, disease_name="sis")
-    print(report.head(20))
-    print("\nAgents with at least one contact:")
-    print(report.loc[report["contact_count"] > 0, ["agent_id", "contact_count", "contact_infected_fraction", "infected"]].head(20))
-    print("\nAgents whose current contacts are infected:")
-    print(report.loc[report["contact_infected_fraction"] > 0, ["agent_id", "contact_count", "contact_infected_fraction"]].head(20))
+    print("\n=== AGENT-LEVEL CONTACT PREVALENCE ===")
+    report = agent_prevalence_at_ti(sim, ti=target_ms)
+    print(report.head())
 
+    # =========================
+    # GIF OUTPUTS
+    # =========================
     print("\n=== SAVING NETWORK GIF ===")
-    network_gif_path = save_network_gif(
+    save_network_gif(
         df=df,
         n_agents=n_agents,
         start_date=start_date,
-        out_path=Path("data_ingestion/network_over_time.gif"),
+        out_path="data_ingestion/network_over_time.gif",
     )
-    print(f"Saved network GIF to {network_gif_path}")
 
     print("\n=== SAVING INFECTION GIF ===")
-    infection_gif_path = save_infection_gif(
+    save_infection_gif(
         csv_path=csv_path,
-        out_path=Path("data_ingestion/infection_over_time.gif"),
+        out_path="data_ingestion/infection_over_time.gif",
         target_ms=target_ms,
-        disease_name="sis",
-        init_prev=0.1,
     )
-    print(f"Saved infection GIF to {infection_gif_path}")
 
     print("\n=== DONE ===")
