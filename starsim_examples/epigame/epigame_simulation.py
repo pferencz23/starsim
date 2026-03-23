@@ -7,29 +7,35 @@ ss_int = ss.dtypes.int
 ss_float = ss.dtypes.float
 _ = None # For function signatures
 
-class SEIR(ss.Infection):
+class SEIR_AMS(ss.Infection):
     """
-    SEIR model
+    SEIR model with Asymtomatic/Mild/Severe infections
 
     This class implements a basic SEIR model with states for susceptible, exposed,
-    infected/infectious, and recovered. It also includes deaths, and basic
-    results.
+    infected/infectious, and recovered. Within infectious, a person may have asymtomatic,
+    mild or severe disease, with a different probability of death based on severity of disease.
 
     Args:
         beta (float/`ss.prob`): the infectiousness
         init_prev (float/s`s.bernoulli`): the fraction of people to start of being infected
         dur_exp (float/`ss.dur`/`ss.Dist`): how long (in years) people are exposed/incubating for
         dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
-        p_death (float/`ss.bernoulli`): the probability of death from infection
+        p_symp (`ss.choice`): probability of a person developing symptoms of a particular severity
+        p_death_mild (float/`ss.bernoulli`): the probability of death from mild disease
+        p_death_severe (float/`ss.bernoulli`): the probability of death from severe disease
+
     """
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.peryear(0.1),
             init_prev = ss.bernoulli(p=0.01),
-            dur_exp = ss.lognorm_ex(mean=ss.years(1)),
-            dur_inf = ss.lognorm_ex(mean=ss.years(6)),
-            p_death = ss.bernoulli(p=0.01),
+            beta = ss.perday(0.0907*24),
+            dur_exp = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
+            dur_inf = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
+            p_symp = ss.choice(a=3, p=[0.30, 0.42, 0.28]),  # 0=asymptomatic, 1=mild, 2=severe
+            p_death_mild = ss.bernoulli(p=0.25),
+            p_death_severe = ss.bernoulli(p=0.70),
+            p_death = ss.bernoulli(p=0.6*0.25 + 0.4*0.7),
         )
         self.update_pars(pars, **kwargs)
 
@@ -38,6 +44,7 @@ class SEIR(ss.Infection):
             ss.BoolState('susceptible', default=True, label='Susceptible'),
             ss.BoolState('exposed', label='Exposed'),
             ss.BoolState('infected', label='Infectious'),
+            ss.FloatArr('symptom_cat', label='Symptom category'),
             ss.BoolState('recovered', label='Recovered'),
             ss.FloatArr('ti_exposed', label='TIme of exposure'),
             ss.FloatArr('ti_infected', label='Time of infection'),
@@ -82,15 +89,30 @@ class SEIR(ss.Infection):
         dur_exp = p.dur_exp.rvs(uids)
         self.ti_infected[uids] = ti + dur_exp
 
-        # Sample duration of infection
+        # Sample duration of infection and severity of symptoms
         dur_inf = p.dur_inf.rvs(uids)
+        symp = p.p_symp.rvs(uids)
+        self.symptom_cat[uids] = symp
+
+        asym_uids = uids[symp == 0]
+        mild_uids = uids[symp == 1]
+        severe_uids = uids[symp == 2]
 
         # Determine who dies and who recovers and when
-        will_die = p.p_death.rvs(uids)
-        dead_uids = uids[will_die]
-        rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = ti + dur_exp[will_die] + dur_inf[will_die] # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = ti + dur_exp[~will_die] + dur_inf[~will_die]
+        mild_die   = p.p_death_mild.rvs(mild_uids)
+        severe_die = p.p_death_severe.rvs(severe_uids)
+        print('Mild die: ', mild_die)
+        print('Severe die: ', severe_die)
+
+        will_die = np.zeros(len(uids), dtype=bool)
+        mild_mask = symp == 1
+        severe_mask = symp == 2
+        will_die[mild_mask]   = p.p_death_mild.rvs(uids[mild_mask])
+        will_die[severe_mask] = p.p_death_severe.rvs(uids[severe_mask])
+        print('Will die: ', will_die)
+
+        self.ti_dead[uids[will_die]] = ti + dur_exp[will_die] + dur_inf[will_die] # Consider rand round, but not CRN safe
+        self.ti_recovered[uids[~will_die]] = ti + dur_exp[~will_die] + dur_inf[~will_die]
         return
 
     def step_die(self, uids):
@@ -118,16 +140,9 @@ class SEIR(ss.Infection):
 
 
 #### Define simulation parameters
-# TODO: update based on epigame parameters
 people = ss.People(n_agents=1000)
 network = ss.RandomNet(n_contacts=2) # TODO: replace with AUIB data-based network
-seir = SEIR(
-        init_prev = ss.bernoulli(p=0.01),
-        beta = ss.perday(0.0907*24),
-        dur_inf = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
-        p_death = ss.bernoulli(p=0.6*0.25 + 0.4*0.7),
-        dur_exp = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
-    )
+seir = SEIR_AMS()
 
 # Run simulation
 sim = ss.Sim(
@@ -141,4 +156,4 @@ sim = ss.Sim(
 
 sim.run()
 sim.plot()
-sim.diseases.seir.plot()
+sim.diseases.seir_ams.plot()
