@@ -48,8 +48,8 @@ def main():
     seir = ss.SEIR_AMS(
         init_prev      = ss.bernoulli(p=0.01),
         beta           = ss.perday(0.0907*24),
-        dur_exp        = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
-        dur_inf        = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
+        dur_exp        = ss.expon(scale=ss.days(10/24)),
+        dur_inf        = ss.expon(scale=ss.days(77/24)),
         p_symp         = ss.choice(a=3, p=[0.30, 0.42, 0.28]),
         p_death_mild   = ss.bernoulli(p=0.25),
         p_death_severe = ss.bernoulli(p=0.70),
