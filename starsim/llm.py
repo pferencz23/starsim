@@ -345,6 +345,8 @@ class LLMIntervention(ss.Intervention):
     def _agent_status(self, uid, disease):
         if disease is None:
             return 'unknown'
+        if not self.sim.people.alive[uid]:
+            return 'dead'
         if hasattr(disease, 'symptom_cat') and disease.symptom_cat[uid]:
             # asymptomatic
             if 0 == disease.symptom_cat[uid]:
@@ -360,12 +362,6 @@ class LLMIntervention(ss.Intervention):
                 if hasattr(disease, 'infected') and disease.infected[uid]:
                     self.has_been_infected[uid] = True
                     return 'severe symptom'
-        # if hasattr(disease, 'recovered') and disease.recovered[uid]:
-        #     return 'recovered'
-        # if hasattr(disease, 'exposed') and disease.exposed[uid]:
-        #     return 'exposed'
-        if hasattr(disease, 'dead') and disease.dead[uid]:
-            return 'dead'
         return 'healthy'
 
     def _call_llm_agent(self, uid, disease):
@@ -529,13 +525,21 @@ class LLMIntervention(ss.Intervention):
         for uid, did_quarantine in decisions.items():
             self.decision_log.append(
                 dict(
-                    date=current_date, 
-                    uid=uid, 
-                    quarantined=did_quarantine, 
-                    status=self._agent_status(uid, disease), 
+                    date=current_date,
+                    uid=uid,
+                    quarantined=did_quarantine,
+                    status=self._agent_status(uid, disease),
                     points=self.points[uid]
                 )
             )
+
+        # Add a row for each dead tracked agent
+        if self.agent_uids is not None:
+            dead_tracked = np.setdiff1d(self.agent_uids, np.array(self.sim.people.auids))
+            for uid in dead_tracked:
+                self.decision_log.append(
+                    dict(date=current_date, uid=int(uid), quarantined=False, status='dead', points=0.0)
+                )
 
         if len(q_list):
             self.quarantined[q_list] = True
