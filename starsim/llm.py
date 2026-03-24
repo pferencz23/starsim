@@ -431,7 +431,6 @@ class LLMIntervention(ss.Intervention):
                 counts[i] += len(contacts)
         return counts
 
-
     # ------------------------------------------------------------------
     # Module lifecycle
     # ------------------------------------------------------------------
