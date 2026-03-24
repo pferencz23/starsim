@@ -29,55 +29,70 @@ def default_agent_prompt(mod, uid, disease):
     """
     status         = mod._agent_status(uid, disease)
     local_prev     = mod._local_prevalence(uid, disease)
+    _has_been_infected = mod.has_been_infected[uid]
     return (
-        f"You are playing an epidemic decision game where your goal is to maximise your total points.\n"
-        f"\n"
-        f"Game mechanics:\n"
-        f"- A disease spreads through a contact network: interacting with others exposes you to infection risk.\n"
-        f"- Your infection risk increases with local prevalence ({local_prev:.0%}) and your contacts.\n"
-        f"- If infected, you may lose points (reduced rewards, possible large penalties).\n"
-        f"- You move through health states (susceptible → infected → recovered).\n"
-        f"\n"
-        f"Decision each round:\n"
-        f"- Quarantine: {mod.low_reward} pts. No infection risk this round.\n"
-        f"- Stay active: {mod.reward_high[uid]:.0f} pts. Risk infection from contacts.\n"
-        f"\n"
-        f"This is a trade-off between:\n"
-        f"- Short-term reward (staying active)\n"
-        f"- Long-term risk (infection causing point losses)\n"
-        f"\n"
-        f"Your objective:\n"
-        f"Maximise your total points over time. Consider expected future losses from infection, not just immediate reward.\n"
-        f"\n"
-        f"Health decision framework (Health Belief Model):\n"
-        f"The Health Belief Model (HBM) is a psychological framework used to understand health-related decisions. "
-        f"It explains behavior based on six main factors:\n"
-        f"Perceived susceptibility: your personal assessment of risk (how likely you are to get infected).\n"
-        f"Perceived severity: how serious infection would be for you (possible point losses, complications).\n"
-        f"Perceived benefits: the advantages of taking preventive action (quarantining protects you).\n"
-        f"Perceived barriers: the costs or downsides of action (losing high reward points by quarantining).\n"
-        f"Self-efficacy: your confidence in successfully performing the preventive action (ability to quarantine effectively).\n"
-        f"Cues to action: triggers from your environment or game that prompt a decision (local prevalence, infected contacts).\n"
-        f"\n"
-        f"Your current state:\n"
-        f"- Time: {mod.ti}\n"
-        f"- Status: {status}\n"
-        f"- Points: {mod.points[uid]:.0f}\n"
-        f"- Perceived infection risk: {mod.percieved_infection_risk[uid]:.2f}\n"
-        f"- Perceived health severity: {mod.percieved_health_severity[uid]:.2f}\n"
-        f"- Quarantine self-efficacy: {mod.quarantine_self_efficacy[uid]:.2f}\n"
-        f"- Quarantine response efficacy: {mod.quarantine_response_efficacy[uid]:.2f}\n"
-        f"\n"
-        f"Use this framework to guide your decision. Should you quarantine this round? Reply with only 'yes' or 'no'."
-    )
+    f"You are playing an epidemic decision game where your goal is to maximise your total points.\n"
+    f"\n"
+    f"Game mechanics:\n"
+    f"- A disease spreads through a contact network: interacting with others exposes you to infection risk.\n"
+    f"- Your infection risk increases with local prevalence and your contacts.\n"
+    f"- If infected, you may lose points (reduced rewards, possible large penalties).\n"
+    f"- You move through health states (susceptible → infected → recovered).\n"
+    f"\n"
+    f"Decision each round:\n"
+    f"- Quarantine: {mod.low_reward} pts. No infection risk this round.\n"
+    f"- Stay active: {mod.high_reward[uid]:.0f} pts. Risk infection from contacts.\n"
+    f"\n"
+    f"This is a trade-off between:\n"
+    f"- Short-term reward (staying active)\n"
+    f"- Long-term risk (infection causing point losses)\n"
+    f"\n"
+    f"Your objective:\n"
+    f"Maximise your total points over time. Consider expected future losses from infection, not just immediate reward.\n"
+    f"\n"
+    f"To help you make this decision, you are given initial beliefs related to epidemics and real-time epidemic information in the form of local prevalence, as well as your previous infection history.\n"
+    f"\n"
+    f"Your initial beliefs:\n"
+    f"- These values come from your pregame survey responses.\n"
+    f"- Each belief is on a 1 to 6 scale.\n"
+    f"- 1 means the weakest possible belief.\n"
+    f"- 6 means the strongest possible belief.\n"
+    f"- Higher values mean stronger agreement or confidence.\n"
+    f"\n"
+    f"Belief framework:\n"
+    f"- Perceived infection risk: how likely you think it is that you will get infected.\n"
+    f"- Perceived health severity: how serious you think infection would be for your health.\n"
+    f"- Quarantine self-efficacy: how confident you are that you can successfully follow quarantine.\n"
+    f"- Quarantine response efficacy: how effective you think quarantine is at preventing spread.\n"
+    f"\n"
+    f"Local prevalence (0-1):\n"
+    f"- This is the fraction of people you interacted with in the previous timestep who were infected.\n"
+    f"- If local prevalence is high, your infection risk from staying active is high.\n"
+    f"- If local prevalence is low, the risk from staying active is lower.\n"
+    f"- Combine this with your beliefs and current points when deciding.\n"
+    f"\n"
+    f"Your current state:\n"
+    f"- Time: {mod.ti}\n"
+    f"- Status: {status}\n"
+    f"- Infection History: {str(_has_been_infected)}\n"
+    f"- Points: {mod.points[uid]:.0f}\n"
+    f"- Local prevalence: {local_prev:.0%}\n"
+    f"- Initial perceived infection risk (1-6): {mod.perceived_infection_risk[uid]:.2f}\n"
+    f"- Initial perceived health severity (1-6): {mod.perceived_health_severity[uid]:.2f}\n"
+    f"- Initial quarantine self-efficacy (1-6): {mod.quarantine_self_efficacy[uid]:.2f}\n"
+    f"- Initial quarantine response efficacy (1-6): {mod.quarantine_response_efficacy[uid]:.2f}\n"
+    f"\n"
+    f"Use this framework to guide your decision. Should you quarantine this round? Reply with only 'yes' or 'no'."
+)
 
 CHOICE_TO_SCORE = {c: i + 1 for i, c in enumerate(["a", "b", "c", "d", "e", "f"])}
 
 QUESTION_TO_STATE = {
-    35: "percieved_infection_risk",
-    41: "percieved_infection_risk",
+    35: "perceived_infection_risk",
+    41: "perceived_infection_risk",
 
-    36: "percieved_health_severity",
+    36: "perceived_health_severity",
+    42: "perceived_health_severity",
 
     37: "quarantine_self_efficacy",
     43: "quarantine_self_efficacy",
@@ -87,8 +102,8 @@ QUESTION_TO_STATE = {
 }
 
 CORE_STATES = [
-    "percieved_infection_risk",
-    "percieved_health_severity",
+    "perceived_infection_risk",
+    "perceived_health_severity",
     "quarantine_self_efficacy",
     "quarantine_response_efficacy",
 ]
@@ -153,8 +168,8 @@ def init_beliefs_from_survey(mod, answers_path: str, user_id_map: dict):
         if uid >= n:
             continue
         
-        mod.percieved_infection_risk[uid] = float(row["percieved_infection_risk"])
-        mod.percieved_health_severity[uid] = float(row["percieved_health_severity"])
+        mod.perceived_infection_risk[uid] = float(row["perceived_infection_risk"])
+        mod.perceived_health_severity[uid] = float(row["perceived_health_severity"])
         mod.quarantine_self_efficacy[uid] = float(row["quarantine_self_efficacy"])
         mod.quarantine_response_efficacy[uid] = float(row["quarantine_response_efficacy"])
 
@@ -269,8 +284,8 @@ class LLMIntervention(ss.Intervention):
         # Per-agent states
         self.define_states(
             ss.BoolState('quarantined',   label='Quarantined'),
-            ss.FloatArr('percieved_infection_risk', default=3.0, label='HBM perceived susceptibility (1-6)'),
-            ss.FloatArr('percieved_health_severity',       default=3.0, label='HBM perceived severity (1-6)'),
+            ss.FloatArr('perceived_infection_risk', default=3.0, label='HBM perceived susceptibility (1-6)'),
+            ss.FloatArr('perceived_health_severity',       default=3.0, label='HBM perceived severity (1-6)'),
             ss.FloatArr('quarantine_self_efficacy',  default=3.0, label='HBM perceived self-efficacy (1-6)'),
             ss.FloatArr('quarantine_response_efficacy',       default=3.0, label='HBM perceived response-efficacy (1-6)'),
             ss.FloatArr('points',         default=0.0, label='Accumulated game points'),
@@ -589,8 +604,8 @@ class LLMIntervention(ss.Intervention):
                 points             = float(self.points[uid]),
                 n_quarantine_steps = int(self.n_quarantine_steps[uid]),
                 quarantine_rate    = float(self.n_quarantine_steps[uid]) / n_decisions,
-                susceptibility     = float(self.percieved_infection_risk[uid]),
-                severity           = float(self.percieved_health_severity[uid]),
+                susceptibility     = float(self.perceived_infection_risk[uid]),
+                severity           = float(self.perceived_health_severity[uid]),
                 self_efficacy      = float(self.quarantine_self_efficacy[uid]),
                 benefits           = float(self.quarantine_response_efficacy[uid]),
             ))
