@@ -41,7 +41,7 @@ def default_agent_prompt(mod, uid, disease):
     f"\n"
     f"Decision each round:\n"
     f"- Quarantine: {mod.low_reward} pts. No infection risk this round.\n"
-    f"- Stay active: {mod.high_reward[uid]:.0f} pts. Risk infection from contacts.\n"
+    f"- Stay active: {mod.reward_high[uid]:.0f} pts. Risk infection from contacts.\n"
     f"\n"
     f"This is a trade-off between:\n"
     f"- Short-term reward (staying active)\n"
@@ -92,7 +92,7 @@ QUESTION_TO_STATE = {
     41: "perceived_infection_risk",
 
     36: "perceived_health_severity",
-    42: "perceived_health_severity",
+    #42: "perceived_health_severity",
 
     37: "quarantine_self_efficacy",
     43: "quarantine_self_efficacy",
