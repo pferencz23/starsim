@@ -154,3 +154,5 @@ dmypy.json
 
 # Node.js and NPM
 node_modules
+
+*.png
