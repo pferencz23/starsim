@@ -99,27 +99,22 @@ def main():
         with open(run_dir / "sim_pickle_error.txt", "w", encoding="utf-8") as f:
             f.write(repr(e))
 
-    # Save sim.results in a best-effort way.
+    # Save sim.results — one CSV per module.
     results = getattr(sim, "results", None)
     if results is not None:
         try:
-            if isinstance(results, pd.DataFrame):
-                results.to_csv(run_dir / "sim_results.csv")
-            elif isinstance(results, pd.Series):
-                results.to_csv(run_dir / "sim_results.csv")
-            elif isinstance(results, dict):
-                for key, value in results.items():
-                    safe_key = str(key).replace("/", "_")
-                    if isinstance(value, pd.DataFrame):
-                        value.to_csv(run_dir / f"results_{safe_key}.csv")
-                    elif isinstance(value, pd.Series):
-                        value.to_csv(run_dir / f"results_{safe_key}.csv")
-                    else:
-                        with open(run_dir / f"results_{safe_key}.json", "w", encoding="utf-8") as f:
-                            json.dump(value, f, indent=2, default=str)
+            dfs = results.to_df(descend=True)
+            # to_df(descend=True) returns either a single DataFrame or an sc.objdict
+            # keyed by module name (e.g. 'sim', 'seir', 'demographics', …).
+            if isinstance(dfs, pd.DataFrame):
+                dfs.to_csv(run_dir / "results_sim.csv")
             else:
-                with open(run_dir / "sim_results.json", "w", encoding="utf-8") as f:
-                    json.dump(results, f, indent=2, default=str)
+                for key, df in dfs.items():
+                    safe_key = str(key).replace("/", "_")
+                    if isinstance(df, pd.DataFrame):
+                        df.to_csv(run_dir / f"results_{safe_key}.csv")
+                    elif isinstance(df, pd.Series):
+                        df.to_csv(run_dir / f"results_{safe_key}.csv")
         except Exception as e:
             with open(run_dir / "sim_results_error.txt", "w", encoding="utf-8") as f:
                 f.write(repr(e))
@@ -189,11 +184,3 @@ def main():
         print(sim.results[label].quarantine_rate)
 
     print(f"\nSaved run artifacts to: {run_dir.resolve()}")
-    
-    # Save a high-level plot of the run.
-    fig = sim.plot()
-    fig.savefig(run_dir / "sim_plot.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-if __name__ == '__main__':
-    main()
