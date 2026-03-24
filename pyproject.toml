@@ -40,6 +40,7 @@ dependencies = [
     "seaborn",
     "optuna",
     "certifi>=2026.2.25",
+    "requests>=2.32.5",
 ]
 
 [project.optional-dependencies]
