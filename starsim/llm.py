@@ -261,11 +261,12 @@ class LLMIntervention(ss.Intervention):
                  model=None, api_key=None, interval=1, decision_hour=9.5,
                  build_prompt=None, init_beliefs=None,
                  max_tokens=None, timeout=5, verbose=False,
-                 max_workers=10, rate_limit=18, agent_uids=None, **kwargs):
+                 max_workers=10, rate_limit=18, agent_uids=None, points_per_contact=1.0, **kwargs):
         super().__init__(**kwargs)
 
         self.low_reward       = low_reward
         self.high_reward      = high_reward
+        self.points_per_contact = points_per_contact
         self.model            = model
         self.api_key          = api_key
         self.interval         = interval
@@ -292,6 +293,7 @@ class LLMIntervention(ss.Intervention):
             ss.FloatArr('n_quarantine_steps', default=0.0, label='Number of steps agent quarantined'),
             ss.FloatArr('reward_high',    default=float(high_reward), label='Per-agent high reward (staying active)'),
             ss.BoolState('has_been_infected', default=False, label='Agent has been infected?'),
+            ss.FloatArr('contacts', default=0.0, label ='Number of Contacts'),
         )
 
         self.log              = []   # Per-step sc.objdict: {t, ti, n_agents, n_quarantined, error}
@@ -344,7 +346,7 @@ class LLMIntervention(ss.Intervention):
 
     def _agent_status(self, uid, disease):
         if disease is None:
-            return 'unknown'
+            return 'healthy'
         if hasattr(disease, 'symptom_cat') and disease.symptom_cat[uid]:
             # asymptomatic
             if 0 == disease.symptom_cat[uid]:
@@ -423,6 +425,16 @@ class LLMIntervention(ss.Intervention):
             return False
         self._last_decision_date = today
         return True
+    
+    def count_contacts(self, uids): 
+        counts = np.zeros(len(self.sim.people), dtype = float)
+        for net in self.sim.networks.values(): 
+            for uid in uids:
+                contacts = net.find_contacts(ss.uids([uid]))
+                contacts = np.setdiff1d(contacts, [uid], assume_unique=False)
+                counts[uid] += len(contacts)
+        return counts
+
 
     # ------------------------------------------------------------------
     # Module lifecycle
@@ -469,6 +481,9 @@ class LLMIntervention(ss.Intervention):
         if len(uids) == 0:
             self.log.append(entry)
             return
+        
+        # update number of contacts 
+        self.contacts[uids] = self._count_contacts(uids)
 
         # LLM calls in parallel batches; each batch waits up to 60s, then rate-limits before the next
         import time as _time_module
@@ -549,6 +564,12 @@ class LLMIntervention(ss.Intervention):
             else:
                 not_infected = active_list
             self.points[not_infected] += self.reward_high[not_infected]
+        
+        # update number of contacts
+        self.contacts[:] = 0.0
+        self.contacts[uids] = self.count_contacts(uids)
+
+        self.points[uids] += self.contacts[uids] * self.points_per_contact
 
         entry.n_quarantined = int(len(q_list))
         self.log.append(entry)
