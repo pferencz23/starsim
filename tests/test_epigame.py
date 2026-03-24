@@ -22,6 +22,9 @@ was done in practice?
 Usage:
 
 OPENROUTER_API_KEY=... uv run python tests/test_epigame.py
+
+GET GRAPHS:
+python starsim/plot_results.py run_outputs/20260324T170428Z/results_sim.csv
 """
 import json
 import os
@@ -184,3 +187,6 @@ def main():
         print(sim.results[label].quarantine_rate)
 
     print(f"\nSaved run artifacts to: {run_dir.resolve()}")
+
+if __name__ == '__main__':
+    main()
