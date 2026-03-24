@@ -329,7 +329,7 @@ class LLMIntervention(ss.Intervention):
             return 'recovered'
         if hasattr(disease, 'exposed') and disease.exposed[uid]:
             return 'exposed'
-        if hasattr(disease, 'dead') and disease.dead[uid]:
+        if self.sim.people.dead[uid]:
             return 'dead'
         return 'susceptible'
 
@@ -408,7 +408,9 @@ class LLMIntervention(ss.Intervention):
         if self.ti == 0:
             return
         disease = self._target_disease()
-        self._restore_transmission(self.quarantined.uids, disease)
+        # Filter to alive agents only — some quarantined agents may have died during the previous step
+        q_uids = ss.uids(np.intersect1d(self.quarantined.uids, self.sim.people.auids))
+        self._restore_transmission(q_uids, disease)
         self.quarantined[:] = False
         return
 
