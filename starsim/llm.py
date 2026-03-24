@@ -92,7 +92,7 @@ QUESTION_TO_STATE = {
     41: "perceived_infection_risk",
 
     36: "perceived_health_severity",
-    #42: "perceived_health_severity",
+    42: "perceived_health_severity",
 
     37: "quarantine_self_efficacy",
     43: "quarantine_self_efficacy",
