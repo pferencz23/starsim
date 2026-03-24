@@ -56,13 +56,13 @@ def main():
     )
 
     sim = ss.Sim(
-        n_agents      = 10,
-        start         = '01-01-2020',
-        stop          = '01-05-2020',
+        n_agents      = n_agents,
+        start         = start_date,
+        stop          = stop_date,
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = 'random',
+        networks      = net,
         interventions = ss.make_intervention(
             high_reward    = 10,
             agent_uids     = all_participant_uids,
@@ -71,16 +71,11 @@ def main():
             name           = 'epigame',
             id_map         = id_map,
             answers_path   = "data_ingestion/survey-answers.csv",
-            group_b_uids   = [5,6,7,8,9],
+            group_b_uids   = group_b_uids,
             group_b_reward = 15,
         ),
     )
     sim.run()
-
-    # Save a high-level plot of the run.
-    fig = sim.plot()
-    fig.savefig(run_dir / "sim_plot.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
 
     # Save a manifest of the run configuration.
     run_metadata = {
@@ -194,7 +189,11 @@ def main():
         print(sim.results[label].quarantine_rate)
 
     print(f"\nSaved run artifacts to: {run_dir.resolve()}")
-
+    
+    # Save a high-level plot of the run.
+    fig = sim.plot()
+    fig.savefig(run_dir / "sim_plot.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 if __name__ == '__main__':
     main()
