@@ -71,14 +71,26 @@ class SEIR_AMS(ss.Infection):
         """ Set prognoses """
         super().set_prognoses(uids, sources)
         ti = self.t.ti
-        self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.infected[uids] = False
-        self.ti_exposed[uids] = ti
         p = self.pars
-        # Sample duration of exposed/incubation
-        dur_exp = p.dur_exp.rvs(uids)
-        self.ti_infected[uids] = ti + dur_exp
+
+        if ti == 0.0:
+
+            self.susceptible[uids] = False
+            self.exposed[uids] = False
+            self.infected[uids] = True
+            dur_exp = np.zeros(len(uids))
+            self.ti_exposed[uids] = ti
+            self.ti_infected[uids] = ti
+
+        else:   
+            self.susceptible[uids] = False
+            self.exposed[uids] = True
+            self.infected[uids] = False
+            self.ti_exposed[uids] = ti
+
+            # Sample duration of exposed/incubation
+            dur_exp = p.dur_exp.rvs(uids)
+            self.ti_infected[uids] = ti + dur_exp
 
         # Sample duration of infection and severity of symptoms
         dur_inf = p.dur_inf.rvs(uids)
