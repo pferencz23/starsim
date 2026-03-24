@@ -185,7 +185,11 @@ def main():
 
         print('\n--- Quarantine rate over time ---')
         print(sim.results[label].quarantine_rate)
-
+    
+    fig = sim.plot()
+    fig.savefig(run_dir / "sim_plot.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    
     print(f"\nSaved run artifacts to: {run_dir.resolve()}")
 
 if __name__ == '__main__':
