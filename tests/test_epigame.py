@@ -56,13 +56,13 @@ def main():
     )
 
     sim = ss.Sim(
-        n_agents      = n_agents,
-        start         = start_date,
-        stop          = stop_date,
+        n_agents      = 10,
+        start         = '01-01-2020',
+        stop          = '01-05-2020',
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = net,
+        networks      = 'random',
         interventions = ss.make_intervention(
             high_reward    = 10,
             agent_uids     = all_participant_uids,
@@ -71,7 +71,7 @@ def main():
             name           = 'epigame',
             id_map         = id_map,
             answers_path   = "data_ingestion/survey-answers.csv",
-            group_b_uids   = group_b_uids,
+            group_b_uids   = [5,6,7,8,9],
             group_b_reward = 15,
         ),
     )
@@ -129,27 +129,37 @@ def main():
             with open(run_dir / "sim_results_error.txt", "w", encoding="utf-8") as f:
                 f.write(repr(e))
 
-    for label in ('group_a', 'group_b'):
-        mod = sim.interventions[label]
-        # Save intervention-specific logs and summaries.
+    # Save everything for every intervention that exists
+    for label, mod in sim.interventions.items():
+        # Save intervention-specific logs and summaries
         try:
-            pd.DataFrame(mod.log).to_csv(run_dir / f"{label}_step_log.csv", index=False)
+            step_log_df = pd.DataFrame(mod.log)
+            step_log_df_a = step_log_df[step_log_df.uid.isin(group_a_uids)]            
+            step_log_df_b = step_log_df[step_log_df.uid.isin(group_b_uids)]  
+            step_log_df_a.to_csv(run_dir / f"{label}_step_log_a.csv", index=False)
+            step_log_df_b.to_csv(run_dir / f"{label}_step_log_b.csv", index=False)
+
         except Exception:
             pass
 
         try:
-            decision_log = mod.decision_log
-            if isinstance(decision_log, list):
-                decision_log = pd.DataFrame(decision_log)
-            decision_log.to_csv(run_dir / f"{label}_decision_log.csv", index=False)
+            decision_log_df = mod.decision_log
+            if isinstance(decision_log_df, list):
+                decision_log_df = pd.DataFrame(decision_log_df)
+
+            decision_log_df_a = decision_log_df[decision_log_df.uid.isin(group_a_uids)]            
+            decision_log_df_b = decision_log_df[decision_log_df.uid.isin(group_b_uids)]  
+            decision_log_df_a.to_csv(run_dir / f"{label}_decision_log_a.csv", index=False)
+            decision_log_df_b.to_csv(run_dir / f"{label}_decision_log_b.csv", index=False)
+            
         except Exception:
             pass
 
         try:
             if isinstance(mod.agent_summary, pd.DataFrame):
-                mod.agent_summary.to_csv(run_dir / f"{label}_agent_summary.csv")
+                mod.agent_summary.to_csv(run_dir / f"{label}_agent_summary.csv", index=False)
             else:
-                pd.DataFrame(mod.agent_summary).to_csv(run_dir / f"{label}_agent_summary.csv")
+                pd.DataFrame(mod.agent_summary).to_csv(run_dir / f"{label}_agent_summary.csv", index=False)
         except Exception:
             pass
 
@@ -158,17 +168,18 @@ def main():
             if hasattr(quarantine_rate, "to_csv"):
                 quarantine_rate.to_csv(run_dir / f"{label}_quarantine_rate.csv")
             else:
-                pd.DataFrame(quarantine_rate).to_csv(run_dir / f"{label}_quarantine_rate.csv")
+                pd.DataFrame(quarantine_rate).to_csv(run_dir / f"{label}_quarantine_rate.csv", index=False)
         except Exception:
             pass
+
         print(f'\n{"=" * 50}')
-        print(f'Group: {label}  (low=5, high={mod.high_reward}, n_agents={len(mod.agent_uids)})')
+        print(f'Intervention: {label}  (high={getattr(mod, "high_reward", None)}, n_agents={len(getattr(mod, "agent_uids", []))})')
         print('=' * 50)
 
         print('\n--- Step log ---')
         for e in mod.log:
             status = f"{e.n_quarantined}/{e.n_agents} quarantined"
-            err    = f"  ERROR: {e.error}" if e.error else ''
+            err = f"  ERROR: {e.error}" if getattr(e, "error", None) else ""
             print(f"  t={e.t}: {status}{err}")
 
         print('\n--- Per-agent quarantine decisions ---')
