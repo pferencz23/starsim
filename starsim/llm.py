@@ -426,13 +426,13 @@ class LLMIntervention(ss.Intervention):
         self._last_decision_date = today
         return True
     
-    def count_contacts(self, uids): 
-        counts = np.zeros(len(self.sim.people), dtype = float)
-        for net in self.sim.networks.values(): 
-            for uid in uids:
+    def count_contacts(self, uids):
+        counts = np.zeros(len(uids), dtype=float)
+        for i, uid in enumerate(uids):
+            for net in self.sim.networks.values():
                 contacts = net.find_contacts(ss.uids([uid]))
                 contacts = np.setdiff1d(contacts, [uid], assume_unique=False)
-                counts[uid] += len(contacts)
+                counts[i] += len(contacts)
         return counts
 
 
@@ -483,7 +483,7 @@ class LLMIntervention(ss.Intervention):
             return
         
         # update number of contacts 
-        self.contacts[uids] = self._count_contacts(uids)
+        self.contacts[uids] = self.count_contacts(uids)
 
         # LLM calls in parallel batches; each batch waits up to 60s, then rate-limits before the next
         import time as _time_module
@@ -569,7 +569,7 @@ class LLMIntervention(ss.Intervention):
         self.contacts[:] = 0.0
         self.contacts[uids] = self.count_contacts(uids)
 
-        self.points[uids] += self.contacts[uids] * self.points_per_contact
+        self.points[active_list] += self.contacts[active_list] * self.points_per_contact
 
         entry.n_quarantined = int(len(q_list))
         self.log.append(entry)
