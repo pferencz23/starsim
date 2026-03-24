@@ -107,7 +107,6 @@ CORE_STATES = [
     "quarantine_response_efficacy",
 ]
 
-# TODO: we can update the beliefs with the data we have from the pre survey.
 def build_pregame_beliefs(
     answers_path: str,
     user_id_map: dict,
