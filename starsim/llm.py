@@ -3,10 +3,8 @@ LLM-powered modules for integrating large language model decisions into simulati
 
 Uses the OpenRouter API to make LLM calls during the simulation loop.
 """
-import json
-import ssl
-import certifi
-import urllib.request
+import concurrent.futures
+import requests
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -175,7 +173,15 @@ def init_beliefs_from_survey(mod, answers_path: str, user_id_map: dict):
         mod.quarantine_self_efficacy[uid] = float(row["quarantine_self_efficacy"])
         mod.quarantine_response_efficacy[uid] = float(row["quarantine_response_efficacy"])
 
-def make_intervention(high_reward, agent_uids, name, model, api_key, id_map):
+def make_intervention(high_reward, agent_uids, name, model, api_key,
+                      id_map=None, answers_path=None, group_b_uids=None, group_b_reward=None):
+    def _init_beliefs(mod):
+        if answers_path is not None and id_map is not None:
+            init_beliefs_from_survey(mod, answers_path, user_id_map=id_map)
+        if group_b_uids is not None:
+            for uid in group_b_uids:
+                mod.reward_high[uid] = group_b_reward
+
     return ss.LLMIntervention(
         low_reward    = 5,
         high_reward   = high_reward,
@@ -183,46 +189,45 @@ def make_intervention(high_reward, agent_uids, name, model, api_key, id_map):
         model         = model,
         api_key       = api_key,
         interval      = 1,
-        decision_hour = 9.5,      # 09:30 AM; respected when dt < 1 day
+        decision_hour = 9.5,
         build_prompt  = default_agent_prompt,
-        init_beliefs  = lambda mod: init_beliefs_from_survey(
-            mod,
-            answers_path="data_ingestion/survey-answers.csv",
-            user_id_map=id_map,
-        ),
+        init_beliefs  = _init_beliefs,
         verbose       = True,
         name          = name,
     )
 
-def _call_openrouter(prompt, model, api_key, max_tokens, timeout, seed=None):
+def _call_openrouter(prompt, model, api_key, max_tokens, timeout, seed=None, session=None):
     """
     Send a prompt to OpenRouter and return the response text.
 
     Pass ``seed`` (int) to enable deterministic outputs across runs (requires
     ``temperature=0``; not all models honour this field).
+    Pass ``session`` (requests.Session) to reuse connections across calls.
     """
     _OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-    payload = json.dumps({
+    payload = {
         'model':       model,
         'messages':    [{'role': 'user', 'content': prompt}],
-        'max_tokens':  max_tokens,
         'temperature': 0,
-        **({'seed': seed} if seed is not None else {}),
-    }).encode('utf-8')
+        'provider':    {'order': ['Groq'], 'allow_fallbacks': True},
+    }
+    if max_tokens is not None:
+        payload['max_tokens'] = max_tokens
+    if seed is not None:
+        payload['seed'] = seed
 
-    req = urllib.request.Request(
+    caller  = session if session is not None else requests
+    resp    = caller.post(
         _OPENROUTER_URL,
-        data    = payload,
+        json    = payload,
         headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type':  'application/json',
         },
-        method = 'POST',
+        timeout = timeout,
     )
-    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-    with urllib.request.urlopen(req, context=ssl_ctx, timeout=timeout) as resp:
-        data = json.loads(resp.read().decode('utf-8'))
-    return data['choices'][0]['message']['content']
+    resp.raise_for_status()
+    return resp.json()['choices'][0]['message']['content']
 
 
 class LLMIntervention(ss.Intervention):
@@ -255,8 +260,8 @@ class LLMIntervention(ss.Intervention):
     def __init__(self, low_reward=5, high_reward=10,
                  model=None, api_key=None, interval=1, decision_hour=9.5,
                  build_prompt=None, init_beliefs=None,
-                 max_tokens=2000, timeout=30, verbose=False,
-                 agent_uids=None, **kwargs):
+                 max_tokens=None, timeout=5, verbose=False,
+                 max_workers=10, rate_limit=18, agent_uids=None, **kwargs):
         super().__init__(**kwargs)
 
         self.low_reward       = low_reward
@@ -265,13 +270,15 @@ class LLMIntervention(ss.Intervention):
         self.api_key          = api_key
         self.interval         = interval
         self.decision_hour    = decision_hour   # Hour of day to make decisions (9.5 = 09:30)
-        self.build_prompt_fn  = build_prompt
+        self.build_prompt_fn  = build_prompt if build_prompt is not None else default_agent_prompt
         self.init_beliefs_fn  = init_beliefs
         self.max_tokens       = max_tokens
         self.timeout          = timeout
         self.verbose          = verbose
+        self.max_workers      = max_workers
+        self.rate_limit       = rate_limit  # Max requests/min (None = unlimited); free models: 20/min
         self.agent_uids       = np.asarray(agent_uids, dtype=int) if agent_uids is not None else None
-
+        self._session = requests.Session()  # Shared across all LLMIntervention instances
         self._last_decision_date = None  # Track last day decisions were made (sub-daily sims)
 
         # Per-agent states
@@ -283,6 +290,8 @@ class LLMIntervention(ss.Intervention):
             ss.FloatArr('quarantine_response_efficacy',       default=3.0, label='HBM perceived response-efficacy (1-6)'),
             ss.FloatArr('points',         default=0.0, label='Accumulated game points'),
             ss.FloatArr('n_quarantine_steps', default=0.0, label='Number of steps agent quarantined'),
+            ss.FloatArr('reward_high',    default=float(high_reward), label='Per-agent high reward (staying active)'),
+            ss.BoolState('has_been_infected', default=False, label='Agent has been infected?'),
         )
 
         self.log              = []   # Per-step sc.objdict: {t, ti, n_agents, n_quarantined, error}
@@ -334,35 +343,41 @@ class LLMIntervention(ss.Intervention):
         return float(disease.infected[contact_uids].mean())
 
     def _agent_status(self, uid, disease):
-        """ Return a brief health status string for one agent """
         if disease is None:
             return 'unknown'
-        if hasattr(disease, 'infected') and disease.infected[uid]:
-            return 'infected'
-        if hasattr(disease, 'recovered') and disease.recovered[uid]:
-            return 'recovered'
-        if hasattr(disease, 'exposed') and disease.exposed[uid]:
-            return 'exposed'
-        if self.sim.people.dead[uid]:
+        if hasattr(disease, 'symptom_cat') and disease.symptom_cat[uid]:
+            # asymptomatic
+            if 0 == disease.symptom_cat[uid]:
+                return 'healthy'
+            # ONLY KNOW IF THEY ARE INFECTED
+            # "mild"
+            if 1 == disease.symptom_cat[uid]:
+                if hasattr(disease, 'infected') and disease.infected[uid]:
+                    self.has_been_infected[uid] = True
+                    return 'mild symptom'
+            # "severe"
+            if 2 == disease.symptom_cat[uid]:
+                if hasattr(disease, 'infected') and disease.infected[uid]:
+                    self.has_been_infected[uid] = True
+                    return 'severe symptom'
+        # if hasattr(disease, 'recovered') and disease.recovered[uid]:
+        #     return 'recovered'
+        # if hasattr(disease, 'exposed') and disease.exposed[uid]:
+        #     return 'exposed'
+        if hasattr(disease, 'dead') and disease.dead[uid]:
             return 'dead'
-        return 'susceptible'
+        return 'healthy'
 
     def _call_llm_agent(self, uid, disease):
-        """ Ask the LLM whether this agent should quarantine. Returns bool. """
+        """ Ask the LLM whether this agent should quarantine. Returns (bool, response_text). """
         fn     = self.build_prompt_fn
         prompt = fn(self, uid, disease)
 
-        if self.verbose:
-            print(f'\n[LLMIntervention t={self.ti}] Agent {uid}:\n{prompt}')
-
         seed    = int(self.sim.pars.rand_seed)
-        content = _call_openrouter(prompt, self.model, self.api_key, self.max_tokens, self.timeout, seed=seed)
+        content = _call_openrouter(prompt, self.model, self.api_key, self.max_tokens, self.timeout, seed=seed, session=self._session)
         content = (content or '').strip().lower()
 
-        if self.verbose:
-            print(f'[LLMIntervention t={self.ti}] Agent {uid} response: {content}')
-
-        return 'yes' in content
+        return 'yes' in content, content
 
     def _zero_transmission(self, q_uids, disease):
         """ Set rel_sus and rel_trans to 0 for quarantined agents """
@@ -435,6 +450,10 @@ class LLMIntervention(ss.Intervention):
         2. Zero transmission for quarantined agents.
         3. Award points.
         """
+        import time as _time
+        _t0 = _time.perf_counter()
+        def _elapsed(): return f'{_time.perf_counter() - _t0:.3f}s'
+
         if not self._is_decision_time():
             return
 
@@ -451,15 +470,51 @@ class LLMIntervention(ss.Intervention):
             self.log.append(entry)
             return
 
-        # One LLM call per agent
-        decisions = {}
-        errors    = []
-        for uid in uids:
+        # LLM calls in parallel batches; each batch waits up to 60s, then rate-limits before the next
+        import time as _time_module
+        BATCH_TIMEOUT  = 60  # seconds to wait per batch before marking non-responders as no-quarantine
+        min_batch_secs = (self.max_workers / self.rate_limit * 60) if self.rate_limit else 0
+
+        decisions  = {}
+        errors     = []
+        uid_list   = list(uids)
+        batch_size = self.max_workers
+        n_batches  = (len(uid_list) + batch_size - 1) // batch_size
+
+        for b, start in enumerate(range(0, len(uid_list), batch_size)):
+            chunk      = uid_list[start:start + batch_size]
+            batch_t0   = _time_module.perf_counter()
+            print(f'\n[{self.name} t={self.ti}] Batch {b+1}/{n_batches} — {len(chunk)} agents ({_elapsed()})', flush=True)
+
+            pool    = concurrent.futures.ThreadPoolExecutor(max_workers=len(chunk))
+            futures = {pool.submit(self._call_llm_agent, uid, disease): int(uid) for uid in chunk}
             try:
-                decisions[int(uid)] = self._call_llm_agent(uid, disease)
-            except Exception as e:
-                decisions[int(uid)] = False
-                errors.append(f'agent {uid}: {e}')
+                for fut in concurrent.futures.as_completed(futures, timeout=BATCH_TIMEOUT):
+                    uid_int = futures[fut]
+                    try:
+                        result, content = fut.result()
+                        decisions[uid_int] = result
+                        print(f'  Agent {uid_int}: {content} ({_elapsed()})', flush=True)
+                    except Exception as e:
+                        decisions[uid_int] = False
+                        errors.append(f'agent {uid_int}: {e}')
+                        print(f'  Agent {uid_int}: ERROR {e} ({_elapsed()})', flush=True)
+            except concurrent.futures.TimeoutError:
+                for fut, uid_int in futures.items():
+                    if uid_int not in decisions:
+                        fut.cancel()
+                        decisions[uid_int] = False
+                        errors.append(f'agent {uid_int}: batch timeout')
+                        print(f'  Agent {uid_int}: TIMEOUT ({_elapsed()})', flush=True)
+            finally:
+                pool.shutdown(wait=False)  # don't block on any still-running threads
+
+            # Rate-limit: ensure we don't exceed rate_limit req/min across batches
+            if min_batch_secs > 0 and b < n_batches - 1:
+                elapsed_batch = _time_module.perf_counter() - batch_t0
+                wait = min_batch_secs - elapsed_batch
+                if wait > 0:
+                    _time_module.sleep(wait)
 
         if errors:
             entry.error = '; '.join(errors)
@@ -493,7 +548,7 @@ class LLMIntervention(ss.Intervention):
                 not_infected = active_list[~disease.infected[active_list]]
             else:
                 not_infected = active_list
-            self.points[not_infected] += self.high_reward
+            self.points[not_infected] += self.reward_high[not_infected]
 
         entry.n_quarantined = int(len(q_list))
         self.log.append(entry)

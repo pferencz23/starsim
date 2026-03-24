@@ -40,19 +40,18 @@ def main():
     run_dir = Path("run_outputs") / pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H%M%SZ")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # change models here: https://openrouter.ai/models
-    MODEL = 'nvidia/nemotron-3-super-120b-a12b:free'
+    MODEL = 'openai/gpt-oss-20b'
     net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
-    # To use real original user_ids instead:
     group_a_uids, group_b_uids = ss.group_split("data_ingestion/participants.csv", id_map)
+    all_participant_uids = group_a_uids + group_b_uids
 
     seir = ss.SEIR_AMS(
-        init_prev = ss.bernoulli(p=0.01),
-        beta = ss.perday(0.0907*24),
-        dur_exp = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
-        dur_inf = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
-        p_symp = ss.choice(a=3, p=[0.30, 0.42, 0.28]),  # 0=asymptomatic, 1=mild, 2=severe
-        p_death_mild = ss.bernoulli(p=0.25),
+        init_prev      = ss.bernoulli(p=0.01),
+        beta           = ss.perday(0.0907*24),
+        dur_exp        = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
+        dur_inf        = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
+        p_symp         = ss.choice(a=3, p=[0.30, 0.42, 0.28]),
+        p_death_mild   = ss.bernoulli(p=0.25),
         p_death_severe = ss.bernoulli(p=0.70),
     )
 
@@ -64,10 +63,17 @@ def main():
         rand_seed     = 42,
         diseases      = seir,
         networks      = net,
-        interventions = [
-            ss.make_intervention(high_reward=10, agent_uids=group_a_uids, name='group_a', model=MODEL, api_key=api_key, id_map=id_map),
-            ss.make_intervention(high_reward=15, agent_uids=group_b_uids, name='group_b', model=MODEL, api_key=api_key, id_map=id_map),
-        ],
+        interventions = ss.make_intervention(
+            high_reward    = 10,
+            agent_uids     = all_participant_uids,
+            model          = MODEL,
+            api_key        = api_key,
+            name           = 'epigame',
+            id_map         = id_map,
+            answers_path   = "data_ingestion/survey-answers.csv",
+            group_b_uids   = group_b_uids,
+            group_b_reward = 15,
+        ),
     )
     sim.run()
 
@@ -78,14 +84,14 @@ def main():
 
     # Save a manifest of the run configuration.
     run_metadata = {
-        "model": MODEL,
-        "rand_seed": 42,
-        "n_agents": n_agents,
-        "start_date": str(start_date),
-        "stop_date": str(stop_date),
-        "group_a_uids": group_a_uids,
-        "group_b_uids": group_b_uids,
-        "id_map": {str(k): int(v) for k, v in id_map.items()},
+        "model":         MODEL,
+        "rand_seed":     42,
+        "n_agents":      n_agents,
+        "start_date":    str(start_date),
+        "stop_date":     str(stop_date),
+        "group_a_uids":  group_a_uids,
+        "group_b_uids":  group_b_uids,
+        "id_map":        {str(k): int(v) for k, v in id_map.items()},
     }
     with open(run_dir / "run_metadata.json", "w", encoding="utf-8") as f:
         json.dump(run_metadata, f, indent=2, default=str)
