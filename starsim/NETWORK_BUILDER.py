@@ -88,6 +88,97 @@ class EpigamesNet(ss.DynamicNetwork):
             added += 1
 
         return added
+
+
+class SyntheticEpigameNet(ss.DynamicNetwork):
+    """
+    Synthetic daily contact network for Epigames-like simulations.
+
+    Contacts are generated endogenously each timestep from active agents.
+    Quarantined agents have reduced contact rates.
+    """
+
+    def __init__(
+        self,
+        beta=1.0,
+        mean_contacts=4.0,
+        quarantine_multiplier=0.25,
+        dur_days=1,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.beta0 = beta
+        self.mean_contacts = mean_contacts
+        self.quarantine_multiplier = quarantine_multiplier
+        self.dur_days = dur_days
+
+    def init_post(self):
+        super().init_post()
+        self._rng = self.sim.rng  # Starsim RNG
+        self._added_today = 0
+
+    def _get_active_uids(self):
+        # Default: all alive agents
+        uids = self.sim.people.uid[self.sim.people.alive]
+        return np.asarray(uids, dtype=ss.dtypes.int)
+
+    def _get_contact_rate(self, uids):
+        """
+        Reduce contacts for quarantined people if the state exists.
+        Adjust this logic to match your actual ABM state name.
+        """
+        rate = np.full(len(uids), self.mean_contacts, dtype=float)
+
+        # Try common quarantine state names; adapt if your project uses something else
+        people = self.sim.people
+        if hasattr(people, "quarantine"):
+            q = np.asarray(people.quarantine[uids]).astype(bool)
+            rate[q] *= self.quarantine_multiplier
+
+        return rate
+
+    def add_pairs(self):
+        active = self._get_active_uids()
+        if len(active) < 2:
+            return 0
+
+        rates = self._get_contact_rate(active)
+        n_contacts = self._rng.poisson(rates).astype(int)
+
+        # Total desired contacts for the day
+        total_half_edges = int(n_contacts.sum())
+        if total_half_edges < 2:
+            return 0
+
+        # Expand each uid according to its contact demand
+        p1 = np.repeat(active, n_contacts)
+
+        # Randomly permute partners among the same active pool
+        p2 = self._rng.choice(active, size=len(p1), replace=True)
+
+        # Remove self-contacts
+        mask = p1 != p2
+        p1 = p1[mask]
+        p2 = p2[mask]
+
+        if len(p1) == 0:
+            return 0
+
+        beta = np.full(len(p1), self.beta0, dtype=float)
+        dur = np.full(len(p1), self.dur_days, dtype=float)
+
+        self.append(
+            p1=p1.astype(ss.dtypes.int),
+            p2=p2.astype(ss.dtypes.int),
+            beta=beta.astype(ss.dtypes.float),
+            dur=dur.astype(ss.dtypes.float),
+        )
+
+        return len(p1)
+
+    def remove_pairs(self):
+        # If you use dur, Starsim will naturally expire edges over time.
+        return 0
     
 
 def build_network(csv_path: str | Path, label: str = "Epigames"):
@@ -96,6 +187,16 @@ def build_network(csv_path: str | Path, label: str = "Epigames"):
     df, n_agents = remap_ids(df)
     df, start_date, stop_date = add_subdaily_timeline(df)
     net = EpigamesNet(df, label=label)
+    start_date = ss.date(start_date)
+    stop_date = ss.date(stop_date)
+    return net, n_agents, start_date, stop_date
+
+def build_network_synth(csv_path: str | Path, label: str = "Epigames_Synth"):
+    df = read_data(csv_path)
+    df = clean_data(df)
+    df, n_agents = remap_ids(df)
+    df, start_date, stop_date = add_subdaily_timeline(df)
+    net = SyntheticEpigameNet(df, label=label)
     start_date = ss.date(start_date)
     stop_date = ss.date(stop_date)
     return net, n_agents, start_date, stop_date
