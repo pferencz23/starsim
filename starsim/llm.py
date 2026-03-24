@@ -31,6 +31,7 @@ def default_agent_prompt(mod, uid, disease):
     """
     status         = mod._agent_status(uid, disease)
     local_prev     = mod._local_prevalence(uid, disease)
+    _has_been_infected = mod.has_been_infected[uid]
     return (
     f"You are playing an epidemic decision game where your goal is to maximise your total points.\n"
     f"\n"
@@ -42,7 +43,7 @@ def default_agent_prompt(mod, uid, disease):
     f"\n"
     f"Decision each round:\n"
     f"- Quarantine: {mod.low_reward} pts. No infection risk this round.\n"
-    f"- Stay active: {mod.high_reward} pts. Risk infection from contacts.\n"
+    f"- Stay active: {mod.high_reward[uid]:.0f} pts. Risk infection from contacts.\n"
     f"\n"
     f"This is a trade-off between:\n"
     f"- Short-term reward (staying active)\n"
@@ -51,7 +52,7 @@ def default_agent_prompt(mod, uid, disease):
     f"Your objective:\n"
     f"Maximise your total points over time. Consider expected future losses from infection, not just immediate reward.\n"
     f"\n"
-    f"To help you make this decision, you are given initial beliefs related to epidemics and real-time epidemic information in the form of local prevalence.\n"
+    f"To help you make this decision, you are given initial beliefs related to epidemics and real-time epidemic information in the form of local prevalence, as well as your previous infection history.\n"
     f"\n"
     f"Your initial beliefs:\n"
     f"- These values come from your pregame survey responses.\n"
@@ -75,6 +76,7 @@ def default_agent_prompt(mod, uid, disease):
     f"Your current state:\n"
     f"- Time: {mod.ti}\n"
     f"- Status: {status}\n"
+    f"- Infection History: {str(_has_been_infected)}\n"
     f"- Points: {mod.points[uid]:.0f}\n"
     f"- Local prevalence: {local_prev:.0%}\n"
     f"- Initial perceived infection risk (1-6): {mod.perceived_infection_risk[uid]:.2f}\n"
