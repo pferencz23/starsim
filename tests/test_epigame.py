@@ -53,7 +53,7 @@ def main():
     run_dir = Path("run_outputs") / pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H%M%SZ")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    MODEL = 'deepseek/deepseek-chat'
+    MODEL = 'openai/gpt-oss-120b'
     net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
     group_a_uids, group_b_uids = ss.group_split("data_ingestion/participants.csv", id_map)
     all_participant_uids = group_a_uids + group_b_uids
@@ -71,8 +71,8 @@ def main():
 
     sim = ss.Sim(
         n_agents      = n_agents,
-        start         = "2020-01-01",
-        stop          = "2020-01-04",
+        start         = start_date,
+        stop          = stop_date,
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
