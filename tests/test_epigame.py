@@ -44,7 +44,8 @@ def main():
     run_dir.mkdir(parents=True, exist_ok=True)
 
     MODEL = 'nvidia/nemotron-3-super-120b-a12b'
-    net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories_double_week1.csv")
+    #Real network data
+    net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
     group_a_uids, group_b_uids = ss.group_split("data_ingestion/participants.csv", id_map)
     all_participant_uids = group_a_uids + group_b_uids
 
@@ -59,6 +60,9 @@ def main():
         
     )
 
+    #Random Net
+    network = ss.RandomNet(n_contacts=ss.lognorm_ex(mean=2.4, std=1.55), dur=ss.days(1/(24*60*6)))
+
     sim = ss.Sim(
         n_agents      = n_agents,
         start         = start_date,
@@ -66,7 +70,7 @@ def main():
         dt            = ss.days(1/17280),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = net,
+        networks      = network,
         interventions = ss.make_intervention(
             high_reward    = 10,
             agent_uids     = all_participant_uids,
