@@ -67,7 +67,7 @@ def main():
         n_agents      = n_agents,
         start         = start_date,
         stop          = stop_date,
-        dt            = ss.days(1/17280),
+        dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
         networks      = network,
