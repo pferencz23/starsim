@@ -43,8 +43,8 @@ def main():
     run_dir = Path("run_outputs") / pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H%M%SZ")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    MODEL = 'openai/gpt-oss-20b'
-    net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
+    MODEL = 'nvidia/nemotron-3-super-120b-a12b'
+    net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories_double_week1.csv")
     group_a_uids, group_b_uids = ss.group_split("data_ingestion/participants.csv", id_map)
     all_participant_uids = group_a_uids + group_b_uids
 
@@ -56,13 +56,14 @@ def main():
         p_symp         = ss.choice(a=3, p=[0.30, 0.42, 0.28]),
         p_death_mild   = ss.bernoulli(p=0.25),
         p_death_severe = ss.bernoulli(p=0.70),
+        
     )
 
     sim = ss.Sim(
         n_agents      = n_agents,
         start         = start_date,
         stop          = stop_date,
-        dt            = ss.days(1/8640),
+        dt            = ss.days(1/17280),
         rand_seed     = 42,
         diseases      = seir,
         networks      = net,
@@ -189,7 +190,7 @@ def main():
     fig = sim.plot()
     fig.savefig(run_dir / "sim_plot.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
-    
+
     print(f"\nSaved run artifacts to: {run_dir.resolve()}")
 
 if __name__ == '__main__':

@@ -345,7 +345,7 @@ def agent_prevalence_at_ti(
     return out
 
 if __name__ == "__main__":
-    csv_path = "data_ingestion/histories.csv"
+    csv_path = "data_ingestion/histories_double_week1.csv"
 
     # =========================
     # LOAD + PREPROCESS
@@ -367,14 +367,14 @@ if __name__ == "__main__":
 
     print("\n=== EDA: CONTACT DURATIONS ===")
     durations = df["dur_ti"]  # in ms (1 tick = 1 ms)
-    print(f"Mean duration (ms): {durations.mean()/60000:.2f}")
-    print(f"Median duration (ms): {durations.median()/60000:.2f}")
-    print(f"Max duration (ms): {durations.max()/60000}")
+    print(f"Mean duration (minutes): {durations.mean()/60000:.2f}")
+    print(f"Median duration (minutes): {durations.median()/60000:.2f}")
+    print(f"Max duration (minutes): {durations.max()/60000}")
 
-    durations_sec = durations / 60000.0
+    durations_minutes = durations / 60000.0
 
     plt.figure()
-    plt.hist(durations, bins=50)
+    plt.hist(durations_minutes, bins=50)
     plt.yscale("log")  # heavy tail check
     plt.title("Distribution of Contact Durations (minutes)")
     plt.xlabel("Duration (minutes)")
@@ -490,18 +490,7 @@ if __name__ == "__main__":
     # GIF OUTPUTS
     # =========================
     print("\n=== SAVING NETWORK GIF ===")
-    save_network_gif(
-        df=df,
-        n_agents=n_agents,
-        start_date=start_date,
-        out_path="data_ingestion/network_over_time.gif",
-    )
 
     print("\n=== SAVING INFECTION GIF ===")
-    save_infection_gif(
-        csv_path=csv_path,
-        out_path="data_ingestion/infection_over_time.gif",
-        target_ms=target_ms,
-    )
 
     print("\n=== DONE ===")

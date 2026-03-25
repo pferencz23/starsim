@@ -76,7 +76,7 @@ def default_agent_prompt(mod, uid, disease):
     f"- Status: {status}\n"
     f"- Infection History: {str(_has_been_infected)}\n"
     f"- Points: {mod.points[uid]:.0f}\n"
-    f"- Local prevalence: {local_prev:.0%}\n"
+    f"- Local prevalence: {local_prev}\n"
     f"- Initial perceived infection risk (1-6): {mod.perceived_infection_risk[uid]:.2f}\n"
     f"- Initial perceived health severity (1-6): {mod.perceived_health_severity[uid]:.2f}\n"
     f"- Initial quarantine self-efficacy (1-6): {mod.quarantine_self_efficacy[uid]:.2f}\n"
@@ -260,8 +260,8 @@ class LLMIntervention(ss.Intervention):
     def __init__(self, low_reward=5, high_reward=10,
                  model=None, api_key=None, interval=1, decision_hour=9.5,
                  build_prompt=None, init_beliefs=None,
-                 max_tokens=None, timeout=5, verbose=False,
-                 max_workers=10, rate_limit=18, agent_uids=None, **kwargs):
+                 max_tokens=None, timeout=20, verbose=False,
+                 max_workers=12, rate_limit=100, agent_uids=None, **kwargs):
         super().__init__(**kwargs)
 
         self.low_reward       = low_reward
@@ -332,15 +332,15 @@ class LLMIntervention(ss.Intervention):
         where agents see local prevalence from the prior timestep.
         """
         if disease is None or not hasattr(disease, 'infected'):
-            return 0.0
+            return "0/0"
         contacts = set()
         for net in self.sim.networks.values():
             contacts.update(net.find_contacts(ss.uids([uid])))
         contacts.discard(int(uid))  # exclude self if present
         if not contacts:
-            return 0.0
+            return "0/0"
         contact_uids = ss.uids(list(contacts))
-        return float(disease.infected[contact_uids].mean())
+        return f"{disease.infected[contact_uids].sum()}/{len(contact_uids)}"
 
     def _agent_status(self, uid, disease):
         if disease is None:
