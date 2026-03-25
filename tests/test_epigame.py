@@ -67,7 +67,11 @@ def main():
         p_symp         = ss.choice(a=3, p=[0.30, 0.42, 0.28]),
         p_death_mild   = ss.bernoulli(p=0.25),
         p_death_severe = ss.bernoulli(p=0.70),
+        
     )
+
+    #Random Net
+    network = ss.RandomNet(n_contacts=ss.lognorm_ex(mean=2.4, std=1.55), dur=ss.days(1/(24*60*6)))
 
     sim = ss.Sim(
         n_agents      = n_agents,
@@ -76,7 +80,7 @@ def main():
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = net,
+        networks      = network,
         interventions = ss.make_intervention(
             high_reward    = 10,
             agent_uids     = all_participant_uids,
@@ -208,7 +212,7 @@ def main():
     fig = sim.plot()
     fig.savefig(run_dir / "sim_plot.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
-    
+
     print(f"\nSaved run artifacts to: {run_dir.resolve()}")
 
 if __name__ == '__main__':

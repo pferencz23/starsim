@@ -76,7 +76,7 @@ def default_agent_prompt(mod, uid, disease):
     f"- Status: {status}\n"
     f"- Infection History: {str(_has_been_infected)}\n"
     f"- Points: {mod.points[uid]:.0f}\n"
-    f"- Local prevalence: {local_prev:.0%}\n"
+    f"- Local prevalence: {local_prev}\n"
     f"- Initial perceived infection risk (1-6): {mod.perceived_infection_risk[uid]:.2f}\n"
     f"- Initial perceived health severity (1-6): {mod.perceived_health_severity[uid]:.2f}\n"
     f"- Initial quarantine self-efficacy (1-6): {mod.quarantine_self_efficacy[uid]:.2f}\n"
@@ -332,15 +332,15 @@ class LLMIntervention(ss.Intervention):
         where agents see local prevalence from the prior timestep.
         """
         if disease is None or not hasattr(disease, 'infected'):
-            return 0.0
+            return "0/0"
         contacts = set()
         for net in self.sim.networks.values():
             contacts.update(net.find_contacts(ss.uids([uid])))
         contacts.discard(int(uid))  # exclude self if present
         if not contacts:
-            return 0.0
+            return "0/0"
         contact_uids = ss.uids(list(contacts))
-        return float(disease.infected[contact_uids].mean())
+        return f"{disease.infected[contact_uids].sum()}/{len(contact_uids)}"
 
     def _agent_status(self, uid, disease):
         if disease is None:
@@ -425,18 +425,7 @@ class LLMIntervention(ss.Intervention):
     # ------------------------------------------------------------------
 
     def start_step(self):
-        """
-        Restore transmission for agents that quarantined last step, then
-        reset quarantine flags so each step starts clean.
-        """
         super().start_step()
-        if self.ti == 0:
-            return
-        disease = self._target_disease()
-        # Filter to alive agents only — some quarantined agents may have died during the previous step
-        q_uids = ss.uids(np.intersect1d(self.quarantined.uids, self.sim.people.auids))
-        self._restore_transmission(q_uids, disease)
-        self.quarantined[:] = False
         return
 
     def step(self):
@@ -452,6 +441,11 @@ class LLMIntervention(ss.Intervention):
 
         if not self._is_decision_time():
             return
+
+        disease = self._target_disease()
+        q_uids = ss.uids(np.intersect1d(self.quarantined.uids, self.sim.people.auids))
+        self._restore_transmission(q_uids, disease)
+        self.quarantined[:] = False
 
         all_uids = self.sim.people.auids
         if self.agent_uids is not None:
