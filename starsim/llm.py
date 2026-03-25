@@ -260,8 +260,8 @@ class LLMIntervention(ss.Intervention):
     def __init__(self, low_reward=5, high_reward=10,
                  model=None, api_key=None, interval=1, decision_hour=9.5,
                  build_prompt=None, init_beliefs=None,
-                 max_tokens=None, timeout=5, verbose=False,
-                 max_workers=10, rate_limit=18, agent_uids=None, **kwargs):
+                 max_tokens=None, timeout=20, verbose=False,
+                 max_workers=12, rate_limit=100, agent_uids=None, **kwargs):
         super().__init__(**kwargs)
 
         self.low_reward       = low_reward

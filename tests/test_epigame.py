@@ -35,6 +35,16 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import starsim as ss
 
+def initial_infection(csv_path: str, user_id_map: dict):
+    df_initial = pd.read_csv(csv_path, index_col=0)
+    df_initial = df_initial[df_initial["inf"] == "CASE0[0]"].copy()
+    df_initial["uid"] = df_initial["user_id"].map(user_id_map)
+    df_initial = df_initial.dropna(subset=["uid"]).copy()
+    df_initial["uid"] = df_initial["uid"].astype(int)
+
+    initial_infection_uids = df_initial["uid"].tolist()
+    return initial_infection_uids
+
 def main():
     api_key = os.environ.get('OPENROUTER_API_KEY')
     if not api_key:
@@ -43,10 +53,11 @@ def main():
     run_dir = Path("run_outputs") / pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H%M%SZ")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    MODEL = 'openai/gpt-oss-20b'
+    MODEL = 'deepseek/deepseek-chat'
     net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
     group_a_uids, group_b_uids = ss.group_split("data_ingestion/participants.csv", id_map)
     all_participant_uids = group_a_uids + group_b_uids
+    initial_infected_ids = initial_infection("data_ingestion/histories.csv", id_map)
 
     seir = ss.SEIR_AMS(
         init_prev      = ss.bernoulli(p=0.01),
@@ -60,8 +71,8 @@ def main():
 
     sim = ss.Sim(
         n_agents      = n_agents,
-        start         = start_date,
-        stop          = stop_date,
+        start         = "2020-01-01",
+        stop          = "2020-01-04",
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
@@ -78,6 +89,14 @@ def main():
             group_b_reward = 15,
         ),
     )
+    # --- Seed initial infections from data ---
+
+    # Get the disease module
+    sim.init()  # make sure the internal module objects are registered
+
+    disease = sim.get_module(ss.SEIR_AMS)   # or ss.Infection
+    disease.set_prognoses(ss.uids(initial_infected_ids))
+
     sim.run()
 
     # Save a manifest of the run configuration.

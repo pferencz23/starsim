@@ -67,3 +67,13 @@ def group_split(csv_path: str, user_id_map: dict):
     group_2 = df.loc[df["group"] == "group2", "uid"].tolist()
 
     return group_1, group_2
+
+def initial_infection(csv_path: str, user_id_map: dict):
+    df = pd.read_csv(csv_path, index_col=0)
+    df = df[df["inf"] == "CASE0[0]"].copy()
+    df["uid"] = df["id"].map(user_id_map)
+    df = df.dropna(subset=["uid"]).copy()
+    df["uid"] = df["uid"].astype(int)
+
+    initial_infection_uids = df.loc[df["group"] == "group1", "uid"].tolist()
+    return initial_infection_uids
