@@ -80,7 +80,7 @@ def main():
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = network,
+        networks      = net,
         interventions = ss.make_intervention(
             high_reward    = 10,
             agent_uids     = all_participant_uids,
