@@ -22,6 +22,9 @@ was done in practice?
 Usage:
 
 OPENROUTER_API_KEY=... uv run python tests/test_epigame.py
+
+GET GRAPHS:
+python starsim/plot_results.py run_outputs/20260324T170428Z/results_sim.csv
 """
 import json
 import os
@@ -40,7 +43,8 @@ def main():
     run_dir = Path("run_outputs") / pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H%M%SZ")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    MODEL = 'openai/gpt-oss-20b'
+    MODEL = 'nvidia/nemotron-3-super-120b-a12b'
+    #Real network data
     net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
     group_a_uids, group_b_uids = ss.group_split("data_ingestion/participants.csv", id_map)
     all_participant_uids = group_a_uids + group_b_uids
@@ -53,7 +57,11 @@ def main():
         p_symp         = ss.choice(a=3, p=[0.30, 0.42, 0.28]),
         p_death_mild   = ss.bernoulli(p=0.25),
         p_death_severe = ss.bernoulli(p=0.70),
+        
     )
+
+    #Random Net
+    network = ss.RandomNet(n_contacts=ss.lognorm_ex(mean=2.4, std=1.55), dur=ss.days(1/(24*60*6)))
 
     sim = ss.Sim(
         n_agents      = n_agents,
@@ -62,7 +70,7 @@ def main():
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = net,
+        networks      = network,
         interventions = ss.make_intervention(
             high_reward    = 10,
             agent_uids     = all_participant_uids,
@@ -182,5 +190,12 @@ def main():
 
         print('\n--- Quarantine rate over time ---')
         print(sim.results[label].quarantine_rate)
+    
+    fig = sim.plot()
+    fig.savefig(run_dir / "sim_plot.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
     print(f"\nSaved run artifacts to: {run_dir.resolve()}")
+
+if __name__ == '__main__':
+    main()
