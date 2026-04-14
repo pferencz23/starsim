@@ -97,6 +97,8 @@ def toy_example():
             init_beliefs = init_beliefs,
             verbose      = True,
             name         = 'epigame',
+            max_workers  = 12,
+            rate_limit   = 100,
         ),
     )
     sim.run()

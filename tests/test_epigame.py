@@ -10,15 +10,6 @@ from the Epigames dataset and are infected according to a SEIR disease model.
 The LLM intervention uses the Health Belief Model (HBM) to inform each agent's decision, 
 weighting perceived susceptibility, severity, self-efficacy, and benefits. 
 
-Research Questions: 
-
-1. How does LLM-guided quarantine behavior, conditioned on 
-individual health status and reward incentives, alter epidemic curve trajectories 
-and cumulative scoring outcomes across distinct payoff structures?
-
-2. Results are benchmarked against epigames how are these scores different to what 
-was done in practice?
-
 Usage:
 
 OPENROUTER_API_KEY=... uv run python tests/test_epigame.py
@@ -43,7 +34,7 @@ def main():
     run_dir = Path("run_outputs") / pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H%M%SZ")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    MODEL = 'nvidia/nemotron-3-super-120b-a12b'
+    MODEL = 'openai/gpt-oss-120b'
     #Real network data
     net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
     group_a_uids, group_b_uids = ss.group_split("data_ingestion/participants.csv", id_map)
@@ -81,6 +72,8 @@ def main():
             answers_path   = "data_ingestion/survey-answers.csv",
             group_b_uids   = group_b_uids,
             group_b_reward = 15,
+            max_workers    = 12,
+            rate_limit     = 100,
         ),
     )
     sim.run()

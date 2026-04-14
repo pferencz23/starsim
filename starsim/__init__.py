@@ -53,6 +53,7 @@ t('products     '); from .products      import *
 t('interventions'); from .interventions import *
 t('analyzers    '); from .analyzers     import *
 t('llm          '); from .llm           import *
+t('llmgame      '); from .llmgame       import *
 t('connectors   '); from .connectors    import *
 t('diseases     '); from .diseases      import *
 t('loop         '); from .loop          import *
